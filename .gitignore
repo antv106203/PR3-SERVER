@@ -1,0 +1,12 @@
+# Bỏ qua file .env
+.env
+
+# Bỏ qua thư mục node_modules
+node_modules/
+
+# Bỏ qua các file log
+*.log
+
+# Bỏ qua các file hệ điều hành tạo ra
+.DS_Store
+Thumbs.db
