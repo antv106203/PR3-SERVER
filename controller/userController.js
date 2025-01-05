@@ -57,11 +57,10 @@ async function getUserByUserId(req, res) {
  * @param {Object} res - Đối tượng phản hồi để gửi dữ liệu trở lại client.
  */
 async function updateUser(req, res) {
-    const user_id = req.params.userId; // Lấy user_id từ params
     const userData = req.body; // Lấy dữ liệu người dùng mới từ body
 
     try {
-        const result = await userService.updateUser(user_id, userData);
+        const result = await userService.updateUser(userData);
         
         // Gửi phản hồi dựa trên kết quả từ updateUser
         if (result.status) {

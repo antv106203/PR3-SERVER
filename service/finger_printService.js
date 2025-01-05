@@ -30,45 +30,51 @@ async function createFingerPrint(data) {
         throw new Error('Lỗi khi lưu fingerprint vào cơ sở dữ liệu.');
     }
 }
-
 async function checkExpiredFingerprints() {
     const connection = await dbConnect.getConnection(); // Lấy kết nối từ pool
 
     try {
-        // Truy vấn tất cả các dấu vân tay hết hạn (dù là 'active' hay 'inactive')
+        // Truy vấn tất cả các dấu vân tay
         const [results] = await connection.query(
-            'SELECT fingerprint_id FROM fingerprints WHERE valid_until < NOW()'
+            'SELECT fingerprint_id, valid_until, status FROM fingerprints'
         );
 
-        // Kiểm tra nếu có dấu vân tay hết hạn
-        if (results.length > 0) {
-            // Lấy danh sách fingerprint_id của các dấu vân tay hết hạn
-            const expiredFingerprints = results.map(fingerprint => fingerprint.fingerprint_id);
+        // Danh sách vân tay hết hạn
+        const expiredFingerprints = [];
 
-            // Cập nhật trạng thái thành 'inactive' chỉ cho những dấu vân tay đang ở trạng thái 'active'
-            await connection.query(
-                'UPDATE fingerprints SET status = "inactive" WHERE fingerprint_id IN (?) AND status = "active"',
-                [expiredFingerprints]
-            );
+        // Duyệt qua từng dấu vân tay để kiểm tra
+        for (const fingerprint of results) {
+            const { fingerprint_id, valid_until, status } = fingerprint;
 
-            console.log(`Đã cập nhật trạng thái thành 'inactive' cho các dấu vân tay active đã hết hạn.`);
-
-            // Định dạng dữ liệu JSON gửi qua MQTT
-            const message = JSON.stringify({
-                list: expiredFingerprints // Đặt danh sách mảng trong trường `list`
-            });
-
-            // Gửi danh sách fingerprint_id hết hạn qua MQTT
-            client.publish('/expiredFingerprints', message, (error) => {
-                if (error) {
-                    console.error('Lỗi khi gửi danh sách dấu vân tay hết hạn qua MQTT:', error);
-                } else {
-                    console.log('Danh sách dấu vân tay hết hạn đã được gửi.');
+            // Kiểm tra nếu thời gian `valid_until` đã hết hạn
+            if (new Date(valid_until) < new Date()) {
+                // Nếu đang active, chuyển trạng thái thành inactive
+                if (status === 'active') {
+                    await connection.query(
+                        'UPDATE fingerprints SET status = "inactive" WHERE fingerprint_id = ?',
+                        [fingerprint_id]
+                    );
+                    console.log(`Cập nhật trạng thái inactive cho fingerprint_id: ${fingerprint_id}`);
                 }
-            });
-        } else {
-            console.log('Không có dấu vân tay hết hạn.');
+
+                // Thêm fingerprint vào danh sách hết hạn (bao gồm cả inactive và active)
+                expiredFingerprints.push(fingerprint_id);
+            }
         }
+
+        // Gửi danh sách vân tay hết hạn qua MQTT dù có hết hạn hay không
+        const message = JSON.stringify({
+            list: expiredFingerprints // Đặt danh sách mảng trong trường `list`
+        });
+
+        client.publish('/expiredFingerprints', message, (error) => {
+            if (error) {
+                console.error('Lỗi khi gửi danh sách dấu vân tay hết hạn qua MQTT:', error);
+            } else {
+                console.log('Danh sách dấu vân tay hết hạn đã được gửi:', expiredFingerprints);
+            }
+        });
+
     } catch (error) {
         console.error('Lỗi trong quá trình kiểm tra dấu vân tay hết hạn:', error);
         throw new Error('Đã xảy ra lỗi trong quá trình kiểm tra dấu vân tay.');
@@ -151,4 +157,92 @@ async function deleteFingerPrint(data) {
         }
     });
 }
-module.exports = { createFingerPrint, startExpiredCheck, deleteFingerPrint};
+
+/**
+ * Cập nhật trạng thái dấu vân tay thành 'active' và đặt giá trị valid_until.
+ *
+ * @param {Object} data - Dữ liệu đầu vào để cập nhật.
+ * @param {number} data.fingerprint_id - ID của dấu vân tay cần cập nhật.
+ * @param {string} data.valid_until - Thời gian mới cho valid_until (định dạng ISO hoặc YYYY-MM-DD HH:mm:ss).
+ * @returns {Object} - Kết quả cập nhật hoặc lỗi nếu xảy ra.
+ */
+async function enableFingerprint(data) {
+    const connection = await dbConnect.getConnection(); // Lấy kết nối từ pool
+    const { fingerprint_id, valid_until } = data;
+
+    if (!fingerprint_id || !valid_until) {
+        throw new Error("Missing required fields: fingerprint_id or valid_until");
+    }
+
+    try {
+        // Cập nhật trạng thái và thời hạn
+        const query = `
+            UPDATE fingerprints
+            SET status = 'active', valid_until = ?
+            WHERE fingerprint_id = ?
+        `;
+
+        const [result] = await connection.execute(query, [valid_until, fingerprint_id]);
+
+        // Kiểm tra số hàng được cập nhật
+        if (result.affectedRows === 0) {
+            throw new Error(`Fingerprint with ID ${fingerprint_id} not found.`);
+        }
+
+        // Trả kết nối lại vào pool
+        connection.release();
+
+        return {
+            message: "Fingerprint updated successfully",
+            fingerprint_id: fingerprint_id,
+        };
+    } catch (error) {
+        // Đảm bảo trả kết nối lại trong trường hợp có lỗi
+        connection.release();
+
+        console.error("Lỗi khi cập nhật cơ sở dữ liệu:", error);
+        throw new Error("Lỗi khi cập nhật fingerprint trong cơ sở dữ liệu.");
+    }
+}
+
+async function disableFingerprint(data) {
+    const connection = await dbConnect.getConnection(); // Lấy kết nối từ pool
+    const { fingerprint_id } = data;
+
+    if (!fingerprint_id) {
+        throw new Error("Missing required fields: fingerprint_id");
+    }
+
+    try {
+        // Cập nhật trạng thái và thời hạn
+        const query = `
+            UPDATE fingerprints
+            SET status = 'inactive', valid_until = NULL
+            WHERE fingerprint_id = ?
+        `;
+
+        const [result] = await connection.execute(query, [fingerprint_id]);
+
+        // Kiểm tra số hàng được cập nhật
+        if (result.affectedRows === 0) {
+            throw new Error(`Fingerprint with ID ${fingerprint_id} not found.`);
+        }
+
+        return {
+            message: "Fingerprint disabled successfully",
+            fingerprint_id: fingerprint_id,
+        };
+    } catch (error) {
+        console.error("Lỗi khi cập nhật cơ sở dữ liệu:", error);
+
+        // Phân biệt lỗi và trả thông điệp rõ ràng hơn
+        if (error.message.includes("not found")) {
+            throw new Error(`Fingerprint with ID ${fingerprint_id} not found.`);
+        }
+        throw new Error("Lỗi khi cập nhật fingerprint trong cơ sở dữ liệu.");
+    } finally {
+        // Đảm bảo trả kết nối lại vào pool trong mọi trường hợp
+        connection.release();
+    }
+}
+module.exports = { createFingerPrint, startExpiredCheck, deleteFingerPrint, enableFingerprint,disableFingerprint};

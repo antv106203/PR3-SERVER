@@ -214,11 +214,11 @@ async function getAllUsers(data) {
  * @param {Object} userData - Dữ liệu người dùng mới.
  * @returns {Promise<Object>} - Trả về một đối tượng chứa trạng thái và thông điệp.
  */
-async function updateUser(userId, userData) {
+async function updateUser(userData) {
     const connection = await dbConnect.getConnection(); // Lấy kết nối từ pool
     try {
         // Kiểm tra userId và userData không phải là null
-        if (userId != null && userData) {
+        if (userData) {
             const query = `
                 UPDATE users 
                 SET fullname = ?, age = ?, email = ?, phone_number = ?, address = ?
@@ -230,7 +230,7 @@ async function updateUser(userId, userData) {
                 userData.email,
                 userData.phoneNumber,
                 userData.address,
-                userId
+                userData.userId
             ]);
 
             if (result.affectedRows > 0) {

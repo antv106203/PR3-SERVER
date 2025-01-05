@@ -8,6 +8,7 @@ const accessService = require("../service/access_logService")
  */
 // Lấy tất cả các bản ghi truy cập với phân trang và lọc
 async function getAllAccessLogs(req, res) {
+    console.log(req.body)
     try {
         // Lấy các tham số từ query
         const page = parseInt(req.body.page, 10) || 1; // Trang hiện tại (mặc định là 1)

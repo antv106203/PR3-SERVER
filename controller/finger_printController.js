@@ -1,4 +1,4 @@
-const { createFingerPrint, deleteFingerPrint } = require("../service/finger_printService");
+const { createFingerPrint, deleteFingerPrint, enableFingerprint, disableFingerprint } = require("../service/finger_printService");
 const client = require("../config/mqqtConnect");
 
 async function createFingerprint (req, res) {
@@ -73,6 +73,71 @@ async function huythem(req, res) {
     }
 }
 
+async function enableFingerPrint(req, res) {
+    try {
+        const { fingerprint_id, valid_until } = req.body;
+
+        // Kiểm tra dữ liệu đầu vào
+        if (!fingerprint_id || !valid_until) {
+            return res.status(400).send({ 
+                message: 'Thiếu fingerprint_id hoặc valid_until trong yêu cầu.' 
+            });
+        }
+
+        // Gọi service để xử lý logic
+        const result = await enableFingerprint({ fingerprint_id, valid_until });
+
+        // Trả về kết quả thành công
+        res.status(200).send({
+            data: result,
+        });
+    } catch (error) {
+        console.error('Lỗi trong enableFingerprintController:', error);
+
+        // Phân loại lỗi và trả về mã lỗi phù hợp
+        if (error.message.includes('not found')) {
+            return res.status(404).send({ message: error.message });
+        } else if (error.message.includes('Missing required fields')) {
+            return res.status(400).send({ message: error.message });
+        } else {
+            return res.status(500).send({ message: 'Đã xảy ra lỗi trên máy chủ.' });
+        }
+    }
+}
+
+async function disableFingerPrint(req, res) {
+    try {
+        const { fingerprint_id } = req.body;
+
+        // Kiểm tra dữ liệu đầu vào
+        if (!fingerprint_id) {
+            return res.status(400).json({ 
+                message: 'Thiếu fingerprint_id trong yêu cầu.' 
+            });
+        }
+
+        // Gọi service để xử lý logic
+        const result = await disableFingerprint({ fingerprint_id }); // Chú ý dùng đúng tên hàm trong service
+
+        // Trả về kết quả thành công
+        return res.status(200).json({
+            message: "Fingerprint disabled successfully",
+            data: result,
+        });
+    } catch (error) {
+        console.error('Lỗi trong FingerdisableprintController:', error);
+
+        // Phân loại lỗi và trả về mã lỗi phù hợp
+        if (error.message.includes('not found')) {
+            return res.status(404).json({ message: error.message });
+        } else if (error.message.includes('Missing required fields')) {
+            return res.status(400).json({ message: error.message });
+        } else {
+            return res.status(500).json({ message: 'Đã xảy ra lỗi trên máy chủ.' });
+        }
+    }
+}
+
 module.exports = {
-    createFingerprint, deleteFingerprint, quetvantay, huythem
+    createFingerprint, deleteFingerprint, quetvantay, huythem, enableFingerPrint, disableFingerPrint
 }

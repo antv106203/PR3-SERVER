@@ -4,6 +4,7 @@ const bodyParser = require('body-parser');
 const userRoutes = require("./routes/userRoutes")
 const accessLogRoutes = require("./routes/accessLogRoutes");
 const finger_printRoutes = require("./routes/finger_printRoutes")
+const authRoutes = require("./routes/authroutes")
 const client = require("./config/mqqtConnect");
 const cors = require('cors'); // Import cors middleware
 const { createAccessLog } = require('./service/access_logService');
@@ -51,6 +52,8 @@ client.on("message", async (topic, message) => {
 });
 const app = express();
 const PORT = 5000;
+app.use(express.json()); // Parse application/json
+app.use(express.urlencoded({ extended: true })); // Parse application/x-www-form-urlencoded
 startExpiredCheck();
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
@@ -58,6 +61,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use('/user', userRoutes);
 app.use('/access-log', accessLogRoutes)
 app.use('/finger-print', finger_printRoutes)
+app.use('/auth', authRoutes)
 
 
 module.exports = app;
