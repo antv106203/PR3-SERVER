@@ -181,7 +181,6 @@ async function enableFingerprint(data) {
             SET status = 'active', valid_until = ?
             WHERE fingerprint_id = ?
         `;
-
         const [result] = await connection.execute(query, [valid_until, fingerprint_id]);
 
         // Kiểm tra số hàng được cập nhật
@@ -189,15 +188,17 @@ async function enableFingerprint(data) {
             throw new Error(`Fingerprint with ID ${fingerprint_id} not found.`);
         }
 
+        // Gọi hàm kiểm tra dấu vân tay hết hạn sau khi cập nhật
+        await checkExpiredFingerprints();
+
         // Trả kết nối lại vào pool
         connection.release();
 
         return {
-            message: "Fingerprint updated successfully",
+            message: "Fingerprint enabled successfully",
             fingerprint_id: fingerprint_id,
         };
     } catch (error) {
-        // Đảm bảo trả kết nối lại trong trường hợp có lỗi
         connection.release();
 
         console.error("Lỗi khi cập nhật cơ sở dữ liệu:", error);
@@ -220,13 +221,15 @@ async function disableFingerprint(data) {
             SET status = 'inactive', valid_until = NULL
             WHERE fingerprint_id = ?
         `;
-
         const [result] = await connection.execute(query, [fingerprint_id]);
 
         // Kiểm tra số hàng được cập nhật
         if (result.affectedRows === 0) {
             throw new Error(`Fingerprint with ID ${fingerprint_id} not found.`);
         }
+
+        // Gọi hàm kiểm tra dấu vân tay hết hạn sau khi cập nhật
+        await checkExpiredFingerprints();
 
         return {
             message: "Fingerprint disabled successfully",
